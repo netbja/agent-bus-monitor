@@ -73,6 +73,17 @@ func TestUpdaterPassOutlivesTheLoop(t *testing.T) {
 	t.Fatal("the pass was killed with the loop")
 }
 
+// The pass runs in its own process group (foureyes: Setpgid had no test).
+func TestUpdaterCmdOwnProcessGroup(t *testing.T) {
+	cmd := updaterCmd("/x/agentbus", true, &bytes.Buffer{})
+	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid {
+		t.Fatalf("SysProcAttr %+v", cmd.SysProcAttr)
+	}
+	if strings.Join(cmd.Args, " ") != "/x/agentbus update --auto --check" {
+		t.Fatalf("args %q", cmd.Args)
+	}
+}
+
 // A missing binary is a failed pass, said in the log, never a panic.
 func TestUpdaterPassMissingBinary(t *testing.T) {
 	var log bytes.Buffer

@@ -24,14 +24,17 @@ const checkEvery = 24 * time.Hour
 
 // Due is the loop's test (§4.2 steps 3 and 4) at now, in now's zone: inside
 // the window with no pass finished in this occurrence of it, a pass; outside
-// it with the last check more than 24 hours old, a check-only pass. A window
+// it with the last check more than 24 hours old, a check-only pass. A
+// deferred pass is not finished: it changed nothing, and the next tick in the
+// same window tries again (§4.3 step 4, foureyes); installed, current,
+// skipped, failed and rolled_back are (a failed tag is not retried). A window
 // that crosses midnight belongs to the day it starts. A time dated after now
 // (a pass or a check) counts as none. An unreadable window never installs: it
 // only checks.
 func Due(st AutoState, window string, now time.Time) (pass, check bool) {
 	if start, ok := occurrence(window, now); ok {
 		p := st.LastPass
-		return p == nil || p.At.Before(start) || p.At.After(now), false
+		return p == nil || p.Result == "deferred" || p.At.Before(start) || p.At.After(now), false
 	}
 	last := st.LastCheck
 	return false, last.IsZero() || last.After(now) || now.Sub(last) > checkEvery

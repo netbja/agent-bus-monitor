@@ -69,13 +69,7 @@ func runUpdater(ctx context.Context, d updaterDeps, log io.Writer) int {
 // returns -1 and leaves the pass running: stopping the loop never kills a
 // pass in flight (§4.1).
 func updaterPass(ctx context.Context, bin string, check bool, log io.Writer) int {
-	args := []string{"update", "--auto"}
-	if check {
-		args = append(args, "--check")
-	}
-	cmd := exec.Command(bin, args...)
-	cmd.Stdout, cmd.Stderr = log, log
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd := updaterCmd(bin, check, log)
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintln(log, "updater: the pass cannot start: "+err.Error())
 		return 1
@@ -101,6 +95,20 @@ func updaterPass(ctx context.Context, bin string, check bool, log io.Writer) int
 		fmt.Fprintf(log, "updater: stopping; the pass (pid %d) runs on\n", cmd.Process.Pid)
 		return -1
 	}
+}
+
+// updaterCmd is a pass's command: bin update --auto (--check when check),
+// its output in log, in its own process group, so a signal to the loop's
+// group (a manager's stop, a terminal's Ctrl-C) never reaches the pass.
+func updaterCmd(bin string, check bool, log io.Writer) *exec.Cmd {
+	args := []string{"update", "--auto"}
+	if check {
+		args = append(args, "--check")
+	}
+	cmd := exec.Command(bin, args...)
+	cmd.Stdout, cmd.Stderr = log, log
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	return cmd
 }
 
 // updatesWindow is updates.window from config.toml (no env variable).

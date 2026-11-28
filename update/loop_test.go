@@ -14,7 +14,7 @@ var loopZone = time.FixedZone("test", 3600)
 
 func at(day, h, m int) time.Time { return time.Date(2026, 11, day, h, m, 0, 0, loopZone) }
 
-func passAt(t time.Time) *AutoPass { return &AutoPass{At: t, Result: "deferred"} }
+func passAt(t time.Time) *AutoPass { return &AutoPass{At: t, Result: "skipped"} }
 
 func TestDueInsideTheWindowOncePerOccurrence(t *testing.T) {
 	cases := []struct {
@@ -29,6 +29,10 @@ func TestDueInsideTheWindowOncePerOccurrence(t *testing.T) {
 		{"yesterday's pass", AutoState{LastPass: passAt(at(27, 3, 5)), LastCheck: at(27, 3, 5)}, at(28, 3, 10), true, false},
 		{"a pass just before the window", AutoState{LastPass: passAt(at(28, 2, 59)), LastCheck: at(28, 2, 59)}, at(28, 3, 0), true, false},
 		{"a pass dated in the future counts as none", AutoState{LastPass: passAt(at(29, 3, 5)), LastCheck: at(28, 2, 0)}, at(28, 3, 10), true, false},
+		// §4.3 step 4: a deferred pass changes nothing, the next tick tries again (foureyes)
+		{"a deferred pass is retried", AutoState{LastPass: &AutoPass{At: at(28, 3, 0), Result: "deferred"}, LastCheck: at(28, 3, 0)}, at(28, 3, 5), true, false},
+		{"a current pass is finished", AutoState{LastPass: &AutoPass{At: at(28, 3, 0), Result: "current"}, LastCheck: at(28, 3, 0)}, at(28, 3, 5), false, false},
+		{"a failed pass is finished", AutoState{LastPass: &AutoPass{At: at(28, 3, 0), Result: "failed"}, LastCheck: at(28, 3, 0)}, at(28, 3, 5), false, false},
 	}
 	for _, c := range cases {
 		pass, check := Due(c.st, "03:00-05:00", c.now)
