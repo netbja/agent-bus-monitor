@@ -152,6 +152,25 @@ func TestLosablePassLeaseLost(t *testing.T) {
 	}
 }
 
+// A lease lost between the queue's write and the losable write ends the
+// whole pass with ErrNotHolder (foureyes).
+func TestMergeQueuePassLeaseLostAtLosable(t *testing.T) {
+	c, b := losChore(t, "git@github.com:o/r.git")
+	ctx := context.Background()
+	c.stashes = func(context.Context, string, []string) ([]string, error) {
+		if err := b.ReleaseDispatch(ctx, "mq"); err != nil {
+			t.Fatal(err)
+		}
+		return nil, nil
+	}
+	if err := c.pass(ctx, "mq"); !errors.Is(err, bus.ErrNotHolder) {
+		t.Fatalf("%v", err)
+	}
+	if rec := mustLosable(t, b); len(rec) != 0 {
+		t.Fatalf("written without the lease: %+v", rec)
+	}
+}
+
 // The chore's pass runs it after the queue, and the service's chore has the
 // real readers.
 func TestMergeQueuePassWritesLosable(t *testing.T) {

@@ -111,8 +111,8 @@ func (c *mergeQueueChore) judgeLosable(ctx context.Context) (map[string]bus.Losa
 				if on == "" {
 					continue
 				}
-				if in, err := c.contains(ctx, env, on, tip); err != nil || in {
-					return in, err
+				if ok, err := c.contains(ctx, env, on, tip); err != nil || ok {
+					return ok, err
 				}
 			}
 			return false, nil
