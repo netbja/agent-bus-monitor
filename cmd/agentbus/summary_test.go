@@ -417,4 +417,20 @@ func TestSummaryReportsFloor(t *testing.T) {
 	if json.Unmarshal([]byte(js), &s); !s.ForYou.ReportsAtLeast {
 		t.Fatalf("json %s", js)
 	}
+	// A full scan that reaches back past the 24 h read every report of the
+	// window: an exact count, no floor.
+	e, re := dialMain(t)
+	t.Cleanup(func() { bus.DeleteProject(ctx, re, e.Project()) })
+	old := strconv.FormatInt(time.Now().Add(-25*time.Hour).UnixMilli(), 10) + "-0"
+	re.XAdd(ctx, &redis.XAddArgs{Stream: bus.StreamKey(e.Project(), "report"), ID: old, Values: map[string]any{"agent": "master", "kind": "note", "message": "m", "needs": "read"}})
+	pipe = re.Pipeline()
+	for i := 0; i < reportScan-1; i++ {
+		pipe.XAdd(ctx, &redis.XAddArgs{Stream: bus.StreamKey(e.Project(), "report"), Values: map[string]any{"agent": "master", "kind": "note", "message": "m", "needs": "read"}})
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, out, _ = summaryRun(t, e, summaryOpts{}, 200); !strings.Contains(out, fmt.Sprintf(" %d reports (24 h)", reportScan-1)) || strings.Contains(out, "≥") {
+		t.Fatalf("an exact count:\n%s", out)
+	}
 }
